@@ -1,79 +1,64 @@
-import telebot
+import requests
 import datetime
 import pytz
-import requests
+import telebot
 
 # Initialize the bot with your token
-token = "YOU HERE TOKEN"
+token = "1234567890:VfWAii_ls?***"
 bot = telebot.TeleBot(token)
 
-# Dictionary mapping time zones to flag emojis
-flag_emojis = {
-    "Africa/Cairo": "🇪🇬",
-    "America/New_York": "🇺🇸",
-    "Asia/Tokyo": "🇯🇵",
-    # Add more time zones and their flag emojis here
-}
+# GitHub repository URL containing the data
+repo_url = "https://raw.githubusercontent.com/C2BoT/TeleBot/master/Of_telebot_pythonTxt"
 
 @bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_photo(message.chat.id, photo="https://graph.org/file/b0d3a4b00f7b8d8a2e099.jpg", caption="Use: /time <امريكا, usa>")
+def handle_start_command(message):
+    bot.reply_to(message, "Hey! Send the /text command followed by your country name to get information.")
 
-@bot.message_handler(commands=['time'])
-def get_time_with_zones(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) > 1:
-        text = args[1].strip().lower()
-        
-        # Retrieve the time zone from the list of links
-        time_zone = get_time_zone_from_links(text)
-        
-        if time_zone is not None and time_zone in flag_emojis:
-            timezone_now = datetime.datetime.now(pytz.timezone(time_zone))
-            time_now = timezone_now.strftime("%I:%M %p")
-            flags_emoji = flag_emojis[time_zone]
-            response = f'''
-••••••••••••••••[{text.title()}]••••••••••••••      
-
-• Current Time: {time_now}
-
-• Flag: {flags_emoji}
-
-• Time Zone: {time_zone}
-            
-••••••••••••••••[{text.title()}]••••••••••••••    
-            '''
-            bot.send_message(message.chat.id, text=response)
-        else:
-            bot.send_message(message.chat.id, text="Invalid time zone.")
-    else:
-        bot.send_message(message.chat.id, text="Please provide a time zone.")
-
-def get_time_zone_from_links(country):
-    # GitHub repository URL containing the links
-    repo_url = "https://raw.githubusercontent.com/C2BoT/text_all_of_bot_telebot/master/Of_telebot_pythonTxt"
+@bot.message_handler(commands=['text'])
+def handle_text_command(message):
+    # Extract the texts after the command
+    texts = message.text.split(maxsplit=1)[1].strip().split()
 
     try:
-        # Send a GET request to retrieve the links file from the GitHub repository
+        # Send a GET request to retrieve the data file from the GitHub repository
         response = requests.get(repo_url)
         response.raise_for_status()
 
-        # Extract the time zone based on the country
-        links = response.text.strip().split('\n')
-        for link in links:
-            link_parts = link.split(',')
-            if len(link_parts) >= 3:
-                link_country = link_parts[0].strip().lower()
-                link_country_translated = link_parts[1].strip().lower()
-                if link_country == country or link_country_translated == country:
-                    return link_parts[2].strip()
-        
-        return None
+        # Extract the time zone and flag emoji information
+        data_lines = response.text.strip().split('\n')
+
+        matched_countries = []
+        for line in data_lines:
+            line_parts = line.split(',')
+            arabic_country = line_parts[0].strip()
+            english_country = line_parts[1].strip()
+            time_zone = line_parts[2].strip()
+            flag_emoji = line_parts[3].strip()
+
+            for text in texts:
+                if (text.lower() == english_country.lower()) or (text == arabic_country.upper()):
+                    country = english_country if text.lower() == english_country.lower() else arabic_country
+
+                    timezone_now = datetime.datetime.now(pytz.timezone(time_zone))
+                    time_now = timezone_now.strftime("%I:%M %p")
+
+                    matched_countries.append(
+                        f"Country: {country}\nTime Zone: {time_zone}\nFlag: {flag_emoji}\nCurrent Time: {time_now}"
+                    )
+                    break
+
+        if matched_countries:
+            message_texts = "\n\n".join(matched_countries)
+            bot.reply_to(message, message_texts)
+        else:
+            bot.reply_to(message, "Countries not found.")
 
     except requests.exceptions.RequestException as e:
-        print("Error retrieving links from GitHub:", e)
-        return None
+        bot.reply_to(message, f"Error retrieving data from GitHub: {e}")
+
+@bot.message_handler(func=lambda message: True)
+def handle_text_message(message):
+    bot.reply_to(message, "Invalid command. Please use the /text command.")
 
 # Start the bot
-bot.delete_webhook()
 bot.polling()
